@@ -1,8 +1,23 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #ffffff; /* Latar utama terang */
+  --foreground: #171717; /* Teks utama terang */
+  
+  /* Variabel spesifik untuk popup KML (selalu terang) */
+  --kml-popup-bg: #ffffff;
+  --kml-popup-text: #374151; /* Abu-abu tua untuk teks utama */
+  --kml-popup-title-text: #057a55; /* Hijau yang lebih gelap dan tegas */
+  --kml-popup-description-text: #4b5563; /* Abu-abu sedang untuk deskripsi */
+  --kml-popup-label-text: #1f2937; /* Untuk label seperti "No pidana:" */
+  --kml-popup-border-separator: #dcfce7; /* Hijau sangat muda untuk garis pemisah */
+  --kml-popup-shadow: 0 6px 24px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.08); /* Bayangan lebih detail */
+  --kml-popup-close-button-color: #9ca3af;
+  --kml-popup-close-button-hover-color: #057a55;
+  --kml-popup-close-button-hover-bg: #f0fdf4;
+  --kml-popup-scrollbar-track: #f8f8f8;
+  --kml-popup-scrollbar-thumb: #d1d1d1;
+  --kml-popup-scrollbar-thumb-hover: #b3b3b3;
 }
 
 @theme inline {
@@ -12,15 +27,178 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Mode gelap untuk elemen UI utama, popup KML akan tetap terang */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0a0a0a; /* Latar utama gelap */
+    --foreground: #ededed; /* Teks utama gelap */
+  }
+
+  /* Styling umum Leaflet untuk mode gelap jika ada popup lain */
+  .leaflet-popup-tip {
+    /* Jika Anda ingin popup lain mengikuti tema gelap: */
+    /* background: #18181b !important;  */
+  }
+  .leaflet-popup-content-wrapper {
+    /* background-color: #18181b !important; */
+    /* color: #ededed !important; */
+  }
+  
+  /* Popup GeoJSON bisa mengikuti tema gelap jika diinginkan */
+  .jejaksatwa-geojson-custom-popup .leaflet-popup-content-wrapper {
+    background-color: #27272a;
+    color: #e4e4e7;
+  }
+  .jejaksatwa-geojson-popup-title {
+    color: #34d399; /* Hijau muda untuk kontras di gelap */
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans, "Segoe UI", Tahoma, Geneva, Verdana, sans-serif);
+}
+
+/* =========================================================================
+  STYLING KUSTOM BARU UNTUK POPUP JEJAK SATWA KML (SELALU TERANG & MENARIK)
+========================================================================= */
+
+.jejaksatwa-kml-custom-popup .leaflet-popup-content-wrapper {
+  background-color: var(--kml-popup-bg);
+  color: var(--kml-popup-text);
+  border-radius: 12px; /* Sudut lebih halus */
+  box-shadow: var(--kml-popup-shadow);
+  padding: 0; 
+  border: 1px solid #e5e7eb; /* Border tipis untuk definisi */
+}
+
+.jejaksatwa-kml-custom-popup .leaflet-popup-content {
+  margin: 0 !important;
+  padding: 0; 
+  width: auto !important;
+  max-height: 300px; /* Sedikit lebih tinggi untuk konten */
+  overflow-y: auto;
+  overflow-x: hidden;
+  line-height: 1.6;
+  font-family: inherit;
+}
+
+.jejaksatwa-kml-popup { 
+  padding: 20px 24px;
+}
+
+.jejaksatwa-kml-popup-title {
+  font-size: 1.25em; /* Lebih besar dan jelas */
+  font-weight: 600; /* Semi-bold */
+  color: var(--kml-popup-title-text);
+  margin: 0 0 14px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--kml-popup-border-separator);
+  line-height: 1.35;
+}
+
+.jejaksatwa-kml-popup-description {
+  font-size: 0.875em; /* Sedikit lebih kecil untuk detail */
+  color: var(--kml-popup-description-text);
+  word-wrap: break-word;
+}
+
+.jejaksatwa-kml-popup-description p { /* Jika deskripsi masih dalam <p> setelah parsing */
+    margin-bottom: 8px;
+}
+.jejaksatwa-kml-popup-description p:last-child {
+    margin-bottom: 0;
+}
+
+/* Styling untuk item detail yang diparsing */
+.jejaksatwa-popup-detail-item {
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column; /* Label di atas, value di bawah untuk ruang sempit */
+}
+@media (min-width: 320px) { /* Atau breakpoint yang sesuai */
+  .jejaksatwa-popup-detail-item {
+    flex-direction: row; /* Label di kiri, value di kanan untuk ruang lebih lebar */
+    align-items: baseline;
+  }
+}
+
+
+.jejaksatwa-popup-detail-label {
+  font-weight: 600; /* Label tebal */
+  color: var(--kml-popup-label-text);
+  margin-right: 6px; /* Spasi antara label dan value */
+  flex-shrink: 0; /* Agar label tidak mengecil */
+  font-size: 0.85em;
+}
+
+.jejaksatwa-popup-detail-value {
+  font-size: 0.85em;
+  color: var(--kml-popup-description-text); /* Sama dengan warna deskripsi */
+  word-break: break-word;
+}
+
+
+/* Tombol Tutup Popup */
+.jejaksatwa-kml-custom-popup .leaflet-popup-close-button {
+  color: var(--kml-popup-close-button-color) !important;
+  background-color: transparent !important;
+  border-radius: 50%;
+  width: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  font-size: 24px !important;
+  font-weight: 300; /* Lebih tipis 'x' nya */
+  text-align: center;
+  top: 12px !important;
+  right: 12px !important;
+  padding: 0 !important;
+  transition: all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1); /* Transisi lebih smooth */
+}
+
+.jejaksatwa-kml-custom-popup .leaflet-popup-close-button:hover {
+  color: var(--kml-popup-close-button-hover-color) !important;
+  background-color: var(--kml-popup-close-button-hover-bg) !important;
+  transform: scale(1.15) rotate(90deg); /* Efek lebih menonjol */
+}
+
+.jejaksatwa-kml-custom-popup .leaflet-popup-tip {
+  background: var(--kml-popup-bg); 
+  box-shadow: none; 
+}
+
+/* Scrollbar Kustom */
+.jejaksatwa-kml-custom-popup .leaflet-popup-content::-webkit-scrollbar {
+  width: 8px;
+}
+.jejaksatwa-kml-custom-popup .leaflet-popup-content::-webkit-scrollbar-track {
+  background: var(--kml-popup-scrollbar-track); 
+  border-radius: 10px;
+}
+.jejaksatwa-kml-custom-popup .leaflet-popup-content::-webkit-scrollbar-thumb {
+  background: var(--kml-popup-scrollbar-thumb); 
+  border-radius: 10px;
+  border: 2px solid var(--kml-popup-scrollbar-track); /* Memberi efek 'inset' */
+}
+.jejaksatwa-kml-custom-popup .leaflet-popup-content::-webkit-scrollbar-thumb:hover {
+  background: var(--kml-popup-scrollbar-thumb-hover);
+}
+
+/* Styling untuk popup GeoJSON (tetap sederhana, bisa dikembangkan) */
+.jejaksatwa-geojson-custom-popup .leaflet-popup-content-wrapper {
+  background-color: #eef2f9; /* Warna terang yang sedikit beda */
+  color: #1f2937;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 0;
+}
+.jejaksatwa-geojson-custom-popup .leaflet-popup-content {
+   margin: 0 !important;
+   padding: 12px 16px; /* Padding lebih besar */
+}
+.jejaksatwa-geojson-popup-title {
+  font-size: 1em; /* Lebih besar */
+  font-weight: 600;
+  color: var(--kml-popup-title-text); /* Menggunakan warna hijau yang sama */
 }
