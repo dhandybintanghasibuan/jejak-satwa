@@ -1,27 +1,48 @@
 "use client";
 
-import { MapContainer, TileLayer, useMap } from "react-leaflet";
-import { useEffect, useState, useRef } from "react";
+import {
+  MapContainer,
+  TileLayer,
+  GeoJSON,
+  Marker,
+  Popup,
+  useMap,
+} from "react-leaflet";
+import { useEffect, useState, useRef, CSSProperties, Fragment } from "react";
 import "leaflet/dist/leaflet.css";
 import L, {
   LatLngBoundsExpression,
   LatLngTuple,
-  Map as LeafletMap,
   LatLngBounds,
+  Marker as LeafletMarkerType,
+  PathOptions,
 } from "leaflet";
 import { motion } from "framer-motion";
+import { Feature, GeoJsonObject } from "geojson";
 
-// Fix ikon Leaflet untuk Next.js
-// @ts-ignore
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
-});
+// --- KONSTANTA ---
+const TILE_LAYER_URL =
+  "https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png";
+const TILE_LAYER_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+const GEOJSON_WILAYAH_PATH = "/data/kabupaten_aceh_new.geojson";
+const KML_SATWA_PATH = "/data/titik_koordinat_satwa.kml";
+const DEFAULT_POPUP_WIDTH = 350;
+const MAP_FLY_TO_DURATION = 0.7;
 
-// Interface KmlPoint
+// Perbaikan ikon Leaflet untuk Next.js
+if (typeof window !== "undefined") {
+  // @ts-ignore
+  delete L.Icon.Default.prototype._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl:
+      "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+    iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  });
+}
+
+// --- Tipe Data ---
 interface KmlPoint {
   id: string;
   name: string;
@@ -29,250 +50,297 @@ interface KmlPoint {
   latlng: LatLngTuple;
 }
 
-// Lebar popup yang seragam
-const POPUP_WIDTH = 300;
+interface OmnivoreLayer extends L.LayerGroup {
+  getBounds: () => LatLngBounds;
+}
 
-// Fungsi createCustomKmlPopupHtml
-function createCustomKmlPopupHtml(name: string, description: string): string {
-  let processedDescription = description;
-  const cdataMatch = description.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
-  if (cdataMatch && cdataMatch[1]) {
-    processedDescription = cdataMatch[1];
-  }
-  processedDescription = processedDescription
-    .replace(/<font[^>]*>/g, "")
-    .replace(/<\/font>/g, "");
+// --- Komponen-komponen ---
 
-  const links: { placeholder: string; html: string }[] = [];
-  let tempDescription = processedDescription.replace(
-    /<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi,
-    (match, href, textContent) => {
-      const placeholder = `__LINK_PLACEHOLDER_${links.length}__`;
-      const linkText = textContent.trim() || href;
-      links.push({
-        placeholder,
-        html: `<p><a href="${href}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${linkText}</a></p>`,
-      });
-      return placeholder;
-    }
+function PopupContent({
+  name,
+  description,
+}: {
+  name: string;
+  description: string;
+}) {
+  const cleanDescription = description.replace(
+    /<!\[CDATA\[([\s\S]*?)\]\]>/,
+    "$1"
   );
+  const lines = cleanDescription
+    .split("\n")
+    .filter((line) => line.trim() !== "");
 
-  const lines = tempDescription.split(/\n|<br\s*\/?>/i);
-  let formattedContent = "";
-  lines.forEach((line) => {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) return;
-    if (trimmedLine.startsWith("__LINK_PLACEHOLDER_")) {
-      formattedContent += trimmedLine + "\n";
-      return;
-    }
-    const parts = trimmedLine.split(/:(.*)/s);
-    if (parts.length > 1 && parts[0].trim() !== "") {
-      const label = parts[0].trim();
-      let value = parts[1].trim();
-      formattedContent += `<p><strong>${label}:</strong> ${value}</p>\n`;
-    } else {
-      formattedContent += `<p>${trimmedLine}</p>\n`;
-    }
-  });
+  const renderValue = (value: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = value.split(urlRegex);
+    return parts.map((part, index) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline"
+          >
+            Lihat Sumber
+          </a>
+        );
+      }
+      return part;
+    });
+  };
 
-  links.forEach((linkInfo) => {
-    const placeholderWithNewline = linkInfo.placeholder + "\n";
-    if (formattedContent.includes(placeholderWithNewline)) {
-      formattedContent = formattedContent.replace(
-        placeholderWithNewline,
-        linkInfo.html
-      );
-    } else {
-      formattedContent = formattedContent.replace(
-        linkInfo.placeholder,
-        linkInfo.html
-      );
-    }
-  });
+  return (
+    <div className="jejaksatwa-kml-popup p-1 font-sans">
+      <h3 className="text-lg font-bold text-gray-800 mb-3 border-b pb-2">
+        {name}
+      </h3>
+      <div className="text-sm max-h-64 overflow-y-auto custom-scrollbar">
+        <table className="w-full text-left">
+          <tbody>
+            {lines.map((line, index) => {
+              // [FIX] Mengganti regex .split() dengan indexOf() untuk kompatibilitas lebih luas
+              const indexOfFirstColon = line.indexOf(":");
+              const hasColon = indexOfFirstColon > -1;
 
-  return `
-    <div class="jejaksatwa-kml-popup">
-      <h3 class="jejaksatwa-kml-popup-title">${name}</h3>
-      <div class="jejaksatwa-kml-popup-description">
-        ${formattedContent.trim()}
+              const label = hasColon
+                ? line.substring(0, indexOfFirstColon)
+                : "";
+              const value = hasColon
+                ? line.substring(indexOfFirstColon + 1).trim()
+                : line.trim();
+
+              if (!value) return null;
+
+              if (hasColon) {
+                return (
+                  <tr key={index} className="border-b border-gray-100">
+                    <td className="py-1.5 pr-2 align-top font-semibold text-gray-600 w-1/3">
+                      {label}
+                    </td>
+                    <td className="py-1.5 text-gray-800">
+                      {renderValue(value)}
+                    </td>
+                  </tr>
+                );
+              } else {
+                return (
+                  <tr key={index} className="border-b border-gray-100">
+                    <td
+                      colSpan={2}
+                      className="py-2 font-semibold text-gray-700"
+                    >
+                      {value}
+                    </td>
+                  </tr>
+                );
+              }
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
-  `;
+  );
 }
 
-// Fungsi WilayahGeoJsonLayer
-function WilayahGeoJsonLayer() {
-  const map = useMap();
+function WilayahLayer() {
+  const [geoJsonData, setGeoJsonData] = useState<GeoJsonObject | null>(null);
   useEffect(() => {
-    fetch("/data/kecamatan_aceh_colored.geojson")
-      .then((res) => res.json())
-      .then((data) => {
-        L.geoJSON(data, {
-          style: (feature: any) => ({
-            color: feature.properties.stroke || "#555",
-            weight: feature.properties["stroke-width"] || 1.5,
-            fillColor: feature.properties.fill || "#999",
-            fillOpacity: feature.properties["fill-opacity"] || 0.6,
-          }),
-          onEachFeature: (feature, layer) => {
-            const name =
-              feature.properties.name ||
-              feature.properties.NAMOBJ ||
-              "Wilayah Tidak Diketahui";
-            layer.bindPopup(
-              `<div class="jejaksatwa-geojson-popup">
-                <h4 class="jejaksatwa-geojson-popup-title">Wilayah: ${name}</h4>
-              </div>`,
-              {
-                className: "jejaksatwa-geojson-custom-popup",
-                minWidth: POPUP_WIDTH,
-                maxWidth: POPUP_WIDTH,
-              }
-            );
-          },
-        }).addTo(map);
-      });
-  }, [map]);
-  return null;
+    fetch(GEOJSON_WILAYAH_PATH)
+      .then((res) => {
+        if (!res.ok) throw new Error("Gagal memuat data GeoJSON");
+        return res.json();
+      })
+      .then((data) => setGeoJsonData(data))
+      .catch((err) => console.error("Error GeoJSON:", err));
+  }, []);
+
+  if (!geoJsonData) return null;
+
+  return (
+    <GeoJSON
+      data={geoJsonData}
+      style={(feature?: Feature) => ({
+        color: feature?.properties?.stroke || "#1e40af",
+        weight: feature?.properties?.["stroke-width"] || 2,
+        fillColor: feature?.properties?.fill || "#3b82f6",
+        fillOpacity: feature?.properties?.["fill-opacity"] || 0.4,
+      })}
+      onEachFeature={(feature, layer) => {
+        const props = feature.properties || {};
+        const name = props.name || props.NAMOBJ || "Wilayah Tidak Diketahui";
+        layer.bindPopup(
+          `<div class="p-1"><h4 class="font-medium">Wilayah: ${name}</h4></div>`
+        );
+      }}
+    />
+  );
 }
 
-// Props untuk TitikSatwaKmlLayer
-interface TitikSatwaKmlLayerProps {
-  onLoad: (points: KmlPoint[]) => void;
-  onMarkersReady: (markers: Record<string, L.Marker>) => void;
-  onKmlLoadSuccess: (bounds: LatLngBounds) => void;
-}
-
-function TitikSatwaKmlLayer({
-  onLoad,
-  onMarkersReady,
-  onKmlLoadSuccess,
-}: TitikSatwaKmlLayerProps) {
+function TitikSatwaLayer({
+  onPointsLoad,
+  onBoundsLoad,
+  activePointId,
+}: {
+  onPointsLoad: (points: KmlPoint[]) => void;
+  onBoundsLoad: (bounds: LatLngBounds) => void;
+  activePointId: string | null;
+}) {
+  const [points, setPoints] = useState<KmlPoint[]>([]);
+  const markerRefs = useRef<Record<string, LeafletMarkerType>>({});
   const map = useMap();
 
   useEffect(() => {
-    const loadKmlData = async () => {
-      const omnivore = (await import("@mapbox/leaflet-omnivore")).default;
-      const localKmlMarkers: Record<string, L.Marker> = {};
-      let pointIdCounter = 0;
+    let isMounted = true;
+    const loadAndParseKML = async () => {
+      try {
+        const omnivore: any = await import("@mapbox/leaflet-omnivore");
+        if (!omnivore || typeof omnivore.kml !== "function") {
+          console.error("Gagal mengimpor leaflet-omnivore.");
+          return;
+        }
 
-      omnivore
-        .kml("/data/TITIK KOORDINAT SATWA.kml")
-        .on("ready", function (this: any) {
+        const kmlLayer = omnivore.kml(KML_SATWA_PATH);
+
+        kmlLayer.on("ready", function (this: OmnivoreLayer) {
+          if (!isMounted) return;
+
           const extractedPoints: KmlPoint[] = [];
+          let pointIdCounter = 0;
+
           this.eachLayer((layer: any) => {
-            if (
-              !(layer instanceof L.Marker) ||
-              typeof layer.getLatLng !== "function"
-            ) {
-              return;
+            if (layer instanceof L.Marker) {
+              const props = layer.feature?.properties || {};
+              const name = props.name || "Titik Tidak Bernama";
+              const description = props.description || "Tidak ada deskripsi.";
+              const coords = layer.getLatLng();
+              const pointId = `kml-point-${name
+                .replace(/\s+/g, "-")
+                .toLowerCase()}-${pointIdCounter++}`;
+              extractedPoints.push({
+                id: pointId,
+                name,
+                description,
+                latlng: [coords.lat, coords.lng],
+              });
             }
-            if (layer.setIcon) layer.setIcon(new L.Icon.Default());
-
-            const name =
-              layer.feature?.properties?.name || "Titik Tidak Bernama";
-            const description =
-              layer.feature?.properties?.description || "Tidak ada deskripsi.";
-
-            const coords = layer.getLatLng();
-            const latlng: LatLngTuple = [coords.lat, coords.lng];
-            const pointId = `kml-point-${name.replace(
-              /\s+/g,
-              "-"
-            )}-${pointIdCounter++}`;
-
-            layer.bindPopup(createCustomKmlPopupHtml(name, description), {
-              className: "jejaksatwa-kml-custom-popup",
-              minWidth: POPUP_WIDTH,
-              maxWidth: POPUP_WIDTH,
-            });
-
-            extractedPoints.push({ id: pointId, name, description, latlng });
-            localKmlMarkers[pointId] = layer as L.Marker;
           });
 
-          onLoad(extractedPoints);
-          onMarkersReady(localKmlMarkers);
+          setPoints(extractedPoints);
+          onPointsLoad(extractedPoints);
 
-          this.addTo(map);
-          if (this.getBounds?.().isValid()) {
-            const kmlBounds = this.getBounds();
-            onKmlLoadSuccess(kmlBounds);
-            map.fitBounds(kmlBounds, { padding: [50, 50] });
+          if (this.getBounds && this.getBounds().isValid()) {
+            onBoundsLoad(this.getBounds());
           }
         });
-    };
-    loadKmlData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, onLoad, onMarkersReady, onKmlLoadSuccess]);
-  return null;
-}
 
-// Komponen Tombol Kontrol FitBounds
-interface FitBoundsControlProps {
-  boundsToFit: LatLngBounds | null;
-  defaultBounds: LatLngBoundsExpression;
-  title?: string;
+        kmlLayer.on("error", (err: any) => {
+          if (isMounted)
+            console.error("Error memuat file KML:", err?.error || err);
+        });
+      } catch (error) {
+        if (isMounted) console.error("Error saat setup Omnivore:", error);
+      }
+    };
+
+    if (map) loadAndParseKML();
+    return () => {
+      isMounted = false;
+    };
+  }, [map, onPointsLoad, onBoundsLoad]);
+
+  useEffect(() => {
+    if (activePointId && markerRefs.current[activePointId]) {
+      const marker = markerRefs.current[activePointId];
+      map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 13), {
+        animate: true,
+        duration: MAP_FLY_TO_DURATION,
+      });
+      setTimeout(() => marker.openPopup(), MAP_FLY_TO_DURATION * 1000);
+    }
+  }, [activePointId, map]);
+
+  return (
+    <Fragment>
+      {points.map((point) => (
+        <Marker
+          key={point.id}
+          position={point.latlng}
+          ref={(ref) => {
+            if (ref) markerRefs.current[point.id] = ref;
+          }}
+        >
+          <Popup minWidth={DEFAULT_POPUP_WIDTH} maxWidth={DEFAULT_POPUP_WIDTH}>
+            <PopupContent name={point.name} description={point.description} />
+          </Popup>
+        </Marker>
+      ))}
+    </Fragment>
+  );
 }
 
 function FitBoundsControl({
   boundsToFit,
   defaultBounds,
-  title = "Lihat Semua Titik",
-}: FitBoundsControlProps) {
+}: {
+  boundsToFit: LatLngBounds | null;
+  defaultBounds: LatLngBoundsExpression;
+}) {
   const map = useMap();
-
   const handleFitBounds = () => {
-    if (boundsToFit && boundsToFit.isValid()) {
-      map.flyToBounds(boundsToFit, { padding: [50, 50], duration: 0.7 });
-    } else {
-      map.flyToBounds(defaultBounds, { padding: [50, 50], duration: 0.7 });
-    }
+    const targetBounds =
+      boundsToFit && boundsToFit.isValid() ? boundsToFit : defaultBounds;
+    map.flyToBounds(targetBounds, {
+      padding: [50, 50],
+      duration: MAP_FLY_TO_DURATION,
+    });
   };
-
-  const controlButtonStyles: React.CSSProperties = {
+  const buttonStyle: CSSProperties = {
     position: "absolute",
     top: "10px",
     right: "10px",
     zIndex: 1000,
-    backgroundColor: "white",
-    padding: "8px", // Sedikit padding agar ikon tidak terlalu mepet
+    background: "white",
+    padding: "8px",
     border: "2px solid rgba(0,0,0,0.2)",
     borderRadius: "4px",
     cursor: "pointer",
     boxShadow: "0 1px 5px rgba(0,0,0,0.65)",
-    lineHeight: "1", // Untuk memastikan ikon vertikal tengah jika ada teks
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
   };
-
   return (
-    <button onClick={handleFitBounds} style={controlButtonStyles} title={title}>
-      {/* Ikon SVG Baru (Terinspirasi dari Gambar Anda) */}
+    <button
+      type="button"
+      onClick={handleFitBounds}
+      style={buttonStyle}
+      title="Lihat Semua Titik"
+      className="leaflet-control"
+    >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="20"
         height="20"
         fill="currentColor"
-        viewBox="0 0 24 24"
+        viewBox="0 0 16 16"
       >
-        <path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z" />
-        <path d="M12.518 6.973c-1.793-.02-3.505.838-4.562 2.368-.306.443-.189 1.045.253 1.351.443.306 1.045.189 1.351-.253.614-.886 1.594-1.466 2.674-1.466 1.304 0 2.458.835 2.875 2.027.12.339.455.543.794.543.087 0 .175-.013.26-.04.487-.152.752-.674.6-1.161C15.981 8.618 14.387 7 12.518 6.973z" />
-        <path d="M9.012 12.212c-.487.002-.914.338-1.017.815-.131.608.313 1.182.92 1.312.092.02.184.03.276.03.508 0 .945-.374 1.005-.885.097-.834-.08-1.69-.483-2.387-.212-.368-.67-.507-1.039-.296-.37.212-.509.67-.298 1.039.238.413.341.876.29 1.345-.02.18-.172.315-.356.315z" />
-        <path d="M14.753 11.383c-.438-.31-.98-.17-1.289.268-.606.856-1.611 1.349-2.711 1.349-1.1 0-2.104-.493-2.711-1.349-.31-.438-.851-.578-1.289-.268-.432.304-.576.845-.268 1.283.933 1.316 2.508 2.134 4.268 2.134s3.334-.818 4.268-2.134c.308-.438.164-.979-.268-1.283z" />
+        <path d="M8 16a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z" />
       </svg>
     </button>
   );
 }
 
-// Komponen Utama Peta
+// --- Komponen Utama ---
 export default function PetaSectionInteraktif() {
-  const [kmlPoints, setKmlPoints] = useState<KmlPoint[]>([]);
-  const mapRef = useRef<LeafletMap | null>(null);
-  const [kmlMarkers, setKmlMarkers] = useState<Record<string, L.Marker>>({});
+  const [sidebarPoints, setSidebarPoints] = useState<KmlPoint[]>([]);
   const [kmlDataBounds, setKmlDataBounds] = useState<LatLngBounds | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activePointId, setActivePointId] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const acehCenter: LatLngTuple = [4.695135, 96.749399];
   const initialMapBounds: LatLngBoundsExpression = [
@@ -280,22 +348,9 @@ export default function PetaSectionInteraktif() {
     [6.1, 98.6],
   ];
 
-  const handleSidebarItemClick = (pointId: string) => {
-    if (!mapRef.current || !kmlMarkers[pointId]) {
-      console.warn(
-        "Referensi peta atau marker tidak ditemukan untuk ID:",
-        pointId
-      );
-      return;
-    }
-    const currentMap = mapRef.current;
-    const marker = kmlMarkers[pointId];
-    const pointLatLng = marker.getLatLng();
-    const targetZoom = currentMap.getZoom() < 12 ? 13 : currentMap.getZoom();
-    currentMap.flyTo(pointLatLng, targetZoom, { animate: true, duration: 0.7 });
-    setTimeout(() => {
-      marker.openPopup();
-    }, 750);
+  const handlePointsLoad = (points: KmlPoint[]) => {
+    setSidebarPoints(points);
+    setIsLoading(false);
   };
 
   return (
@@ -305,10 +360,10 @@ export default function PetaSectionInteraktif() {
     >
       <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 w-full pb-16 md:pb-24">
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: -20 }}
           whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
           viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
           className="text-center mb-12 md:mb-16"
         >
           <h2 className="text-3xl lg:text-4xl font-bold text-green-700 mb-4">
@@ -319,9 +374,9 @@ export default function PetaSectionInteraktif() {
             observasi satwa langka yang dilindungi di Provinsi Aceh.
           </p>
         </motion.div>
+
         <div className="flex flex-col lg:flex-row gap-6 md:gap-8 items-stretch">
-          {/* Sidebar */}
-          <div className="w-full lg:w-1/3 h-auto lg:h-[550px]">
+          <div className="w-full lg:w-1/3 h-auto lg:min-h-[550px] max-h-[550px] flex flex-col">
             <div className="bg-white border border-gray-200 rounded-xl shadow-lg h-full flex flex-col p-5 md:p-6">
               <h3 className="text-xl md:text-2xl font-semibold text-green-700 mb-4 flex items-center gap-2.5 flex-shrink-0">
                 <svg
@@ -339,12 +394,19 @@ export default function PetaSectionInteraktif() {
                 Daftar Titik Kasus Satwa
               </h3>
               <div className="space-y-3 overflow-y-auto pr-2 flex-1 custom-scrollbar">
-                {kmlPoints.length > 0 ? (
-                  kmlPoints.map((point, index) => (
-                    <div
+                {isLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-gray-500 text-sm italic">
+                      Memuat data...
+                    </p>
+                  </div>
+                ) : sidebarPoints.length > 0 ? (
+                  sidebarPoints.map((point, index) => (
+                    <button
+                      type="button"
                       key={point.id}
-                      className="p-3.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-white hover:shadow-md hover:border-green-300 transition-all duration-200 cursor-pointer"
-                      onClick={() => handleSidebarItemClick(point.id)}
+                      className="p-3.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-white hover:shadow-md hover:border-green-300 transition-all duration-200 cursor-pointer text-left w-full block focus:outline-none focus:ring-2 focus:ring-green-500"
+                      onClick={() => setActivePointId(point.id)}
                     >
                       <h4 className="font-semibold text-sm text-gray-800 mb-1">
                         {index + 1}. {point.name}
@@ -353,14 +415,17 @@ export default function PetaSectionInteraktif() {
                         {point.description
                           .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, "$1")
                           .replace(/<[^>]+>/g, " ")
-                          .substring(0, 150) + "..."}
+                          .replace(/\s+/g, " ")
+                          .trim()
+                          .substring(0, 150)}
+                        ...
                       </p>
-                    </div>
+                    </button>
                   ))
                 ) : (
                   <div className="flex items-center justify-center h-full">
-                    <p className="text-gray-500 text-sm italic">
-                      Memuat data titik observasi...
+                    <p className="text-gray-500 text-sm">
+                      Data tidak ditemukan.
                     </p>
                   </div>
                 )}
@@ -368,40 +433,43 @@ export default function PetaSectionInteraktif() {
             </div>
           </div>
 
-          {/* Peta */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-            className="w-full lg:w-2/3 h-[450px] md:h-[500px] lg:h-[550px]"
-          >
-            <div className="relative rounded-xl shadow-2xl overflow-hidden border-2 border-green-300 h-full">
-              <MapContainer
-                ref={mapRef}
-                center={acehCenter}
-                zoom={8}
-                className="w-full h-full"
-                scrollWheelZoom={true}
-                bounds={initialMapBounds}
+          <div className="w-full lg:w-2/3 h-[450px] md:h-[500px] lg:h-[550px]">
+            {isClient ? (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5 }}
+                className="relative rounded-xl shadow-2xl overflow-hidden border-2 border-green-300 h-full"
               >
-                <TileLayer
-                  url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png"
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                />
-                <WilayahGeoJsonLayer />
-                <TitikSatwaKmlLayer
-                  onLoad={setKmlPoints}
-                  onMarkersReady={setKmlMarkers}
-                  onKmlLoadSuccess={setKmlDataBounds}
-                />
-                <FitBoundsControl
-                  boundsToFit={kmlDataBounds}
-                  defaultBounds={initialMapBounds}
-                />
-              </MapContainer>
-            </div>
-          </motion.div>
+                <MapContainer
+                  center={acehCenter}
+                  zoom={8}
+                  className="w-full h-full"
+                  scrollWheelZoom={true}
+                  bounds={initialMapBounds}
+                >
+                  <TileLayer
+                    url={TILE_LAYER_URL}
+                    attribution={TILE_LAYER_ATTRIBUTION}
+                  />
+                  <WilayahLayer />
+                  <TitikSatwaLayer
+                    onPointsLoad={handlePointsLoad}
+                    onBoundsLoad={setKmlDataBounds}
+                    activePointId={activePointId}
+                  />
+                  <FitBoundsControl
+                    boundsToFit={kmlDataBounds}
+                    defaultBounds={initialMapBounds}
+                  />
+                </MapContainer>
+              </motion.div>
+            ) : (
+              <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+                <p>Memuat Peta...</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </section>

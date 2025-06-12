@@ -1,98 +1,64 @@
-"use client";
+"use client"; // Dipertahankan jika ada interaksi klien di level halaman ini, namun idealnya dikurangi
 
-import Image from "next/image";
-import { useEffect, useRef } from "react";
-import Chart from "chart.js/auto";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
-import L from "leaflet";
+import React from "react"; // Umumnya baik untuk selalu diimpor
+import dynamic from "next/dynamic";
+
+// Impor komponen statis atau yang tidak memerlukan penanganan khusus di sisi klien untuk render awal
 import TentangSection from "@/components/TentangSection";
 import HeaderSection from "@/components/HeaderSection";
-import PetaSection from "@/components/PetaSection";
-import StatistikSection from "@/components/StatistikSection";
 import AksiSection from "@/components/AksiSection";
 import Footer from "@/components/FooterSection";
 
-// Perbaikan ikon default Leaflet
-// @ts-ignore
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
+// --- Dynamic Imports untuk Komponen yang Berat di Sisi Klien ---
+
+// PetaSection: Akan berisi semua logika Leaflet.
+// Pastikan path '@/components/PetaSection' sudah benar.
+const PetaSection = dynamic(() => import("@/components/PetaSection"), {
+  ssr: false, // Tidak dirender di server
+  loading: () => (
+    // Placeholder UI saat komponen sedang dimuat
+    <section className="flex items-center justify-center min-h-[500px] bg-gray-100 text-gray-700 py-16 md:py-24">
+      <p className="text-xl">Memuat Peta Interaktif...</p>
+    </section>
+  ),
 });
 
-export default function Home() {
-  const chartRef = useRef<HTMLCanvasElement>(null);
-  const chartInstanceRef = useRef<Chart | null>(null);
+// StatistikSection: Akan berisi semua logika Chart.js.
+// Pastikan path '@/components/StatistikSection' sudah benar.
+const StatistikSection = dynamic(
+  () => import("@/components/StatistikSection"),
+  {
+    ssr: false, // Tidak dirender di server
+    loading: () => (
+      // Placeholder UI
+      <section className="flex items-center justify-center min-h-[400px] bg-gray-100 text-gray-700 py-16 md:py-24">
+        <p className="text-xl">Memuat Statistik...</p>
+      </section>
+    ),
+  }
+);
 
-  useEffect(() => {
-    if (chartRef.current) {
-      if (chartInstanceRef.current) {
-        chartInstanceRef.current.destroy();
-      }
-      chartInstanceRef.current = new Chart(chartRef.current, {
-        type: "bar",
-        data: {
-          labels: ["2019", "2020", "2021", "2022", "2023"],
-          datasets: [
-            {
-              label: "Kasus Perdagangan Satwa",
-              data: [23, 30, 45, 50, 70],
-              backgroundColor: "rgba(22, 163, 74, 0.7)",
-              borderColor: "#16a34a",
-              borderWidth: 2,
-              borderRadius: 5,
-              hoverBackgroundColor: "#15803d",
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            y: {
-              beginAtZero: true,
-              grid: { color: "rgba(255,255,255,0.1)" },
-              ticks: { color: "#e5e7eb" },
-            },
-            x: {
-              grid: { display: false },
-              ticks: { color: "#e5e7eb" },
-            },
-          },
-          plugins: {
-            legend: {
-              labels: {
-                color: "#e5e7eb",
-                font: { size: 14 },
-              },
-            },
-          },
-        },
-      });
-    }
-    return () => {
-      if (chartInstanceRef.current) {
-        chartInstanceRef.current.destroy();
-        chartInstanceRef.current = null;
-      }
-    };
-  }, []);
+export default function Home() {
+  // Logika untuk Chart.js (useEffect, useRef) telah dipindahkan ke dalam komponen StatistikSection.
+  // Impor terkait Leaflet (MapContainer, L, perbaikan ikon) telah dipindahkan ke dalam PetaSection (atau PetaSectionInteraktif).
 
   return (
-    <main className="min-h-screen font-sans bg-white text-gray-800 relative overflow-hidden">
-      {/* Grafik Garis Melengkung Background */}
-      <div className="fixed inset-0 pointer-events-none z-0">
+    <main className="min-h-screen font-sans bg-white text-gray-800 relative overflow-x-hidden">
+      {/* --- Background Animasi (SVG & Partikel) --- */}
+      {/* Ditempatkan dengan z-index negatif agar berada di belakang konten */}
+      <div className="fixed inset-0 pointer-events-none z-[-1] opacity-80">
+        {" "}
+        {/* z-index negatif, opacity disesuaikan */}
         <svg
           className="w-full h-full"
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
-          style={{ height: "600vh" }}
+          // Pertimbangkan lagi kebutuhan tinggi 600vh.
+          // Jika untuk efek parallax panjang, mungkin ada cara lain yang lebih optimal.
+          // Untuk sementara, bisa diatur ke min-height viewport atau sesuai kebutuhan desain yang pasti.
+          style={{ minHeight: "100vh", maxHeight: "100vh", objectFit: "cover" }} // Menyesuaikan agar lebih terkontrol
         >
           <defs>
-            {/* Gradient untuk garis utama */}
             <linearGradient
               id="flowGradient"
               x1="0%"
@@ -106,8 +72,6 @@ export default function Home() {
               <stop offset="75%" stopColor="#065f46" stopOpacity="0.4" />
               <stop offset="100%" stopColor="#064e3b" stopOpacity="0.6" />
             </linearGradient>
-
-            {/* Gradient untuk garis pendukung */}
             <linearGradient
               id="flowGradient2"
               x1="0%"
@@ -119,46 +83,34 @@ export default function Home() {
               <stop offset="50%" stopColor="#6ee7b7" stopOpacity="0.2" />
               <stop offset="100%" stopColor="#a7f3d0" stopOpacity="0.3" />
             </linearGradient>
-
-            {/* Filter untuk efek blur */}
             <filter id="blur">
               <feGaussianBlur stdDeviation="0.5" />
             </filter>
           </defs>
-
-          {/* Garis Utama - Alur Sungai */}
+          {/* Path dan Circle SVG ... (kode SVG tetap sama) */}
           <path
             d="M5,8 Q25,12 30,25 T45,35 Q65,40 70,55 T85,75 Q95,85 92,95"
             fill="none"
             stroke="url(#flowGradient)"
             strokeWidth="1.2"
             strokeLinecap="round"
-            opacity="0.8"
           />
-
-          {/* Garis Pendukung 1 */}
           <path
             d="M2,5 Q20,8 28,20 T48,30 Q68,35 75,50 T88,70 Q98,80 95,92"
             fill="none"
             stroke="url(#flowGradient2)"
             strokeWidth="0.8"
             strokeLinecap="round"
-            opacity="0.6"
             filter="url(#blur)"
           />
-
-          {/* Garis Pendukung 2 */}
           <path
             d="M8,10 Q28,15 35,28 T50,38 Q70,43 77,58 T90,78 Q100,88 97,98"
             fill="none"
             stroke="url(#flowGradient2)"
             strokeWidth="0.6"
             strokeLinecap="round"
-            opacity="0.4"
             filter="url(#blur)"
           />
-
-          {/* Cabang-cabang kecil */}
           <path
             d="M15,15 Q20,18 25,22"
             fill="none"
@@ -187,136 +139,146 @@ export default function Home() {
             strokeWidth="0.3"
             strokeOpacity="0.5"
           />
-
-          {/* Titik-titik ecosystem nodes */}
           <circle cx="15" cy="18" r="0.8" fill="#10b981" opacity="0.6">
+            {" "}
             <animate
               attributeName="r"
               values="0.8;1.2;0.8"
               dur="3s"
               repeatCount="indefinite"
-            />
+            />{" "}
             <animate
               attributeName="opacity"
               values="0.6;0.9;0.6"
               dur="3s"
               repeatCount="indefinite"
-            />
+            />{" "}
           </circle>
           <circle cx="35" cy="30" r="0.8" fill="#059669" opacity="0.6">
+            {" "}
             <animate
               attributeName="r"
               values="0.8;1.2;0.8"
               dur="4s"
               repeatCount="indefinite"
-            />
+            />{" "}
             <animate
               attributeName="opacity"
               values="0.6;0.9;0.6"
               dur="4s"
               repeatCount="indefinite"
-            />
+            />{" "}
           </circle>
           <circle cx="55" cy="45" r="0.8" fill="#047857" opacity="0.6">
+            {" "}
             <animate
               attributeName="r"
               values="0.8;1.2;0.8"
               dur="3.5s"
               repeatCount="indefinite"
-            />
+            />{" "}
             <animate
               attributeName="opacity"
               values="0.6;0.9;0.6"
               dur="3.5s"
               repeatCount="indefinite"
-            />
+            />{" "}
           </circle>
           <circle cx="75" cy="65" r="0.8" fill="#065f46" opacity="0.6">
+            {" "}
             <animate
               attributeName="r"
               values="0.8;1.2;0.8"
               dur="4.5s"
               repeatCount="indefinite"
-            />
+            />{" "}
             <animate
               attributeName="opacity"
               values="0.6;0.9;0.6"
               dur="4.5s"
               repeatCount="indefinite"
-            />
+            />{" "}
           </circle>
           <circle cx="90" cy="85" r="0.8" fill="#064e3b" opacity="0.6">
+            {" "}
             <animate
               attributeName="r"
               values="0.8;1.2;0.8"
               dur="3.2s"
               repeatCount="indefinite"
-            />
+            />{" "}
             <animate
               attributeName="opacity"
               values="0.6;0.9;0.6"
               dur="3.2s"
               repeatCount="indefinite"
-            />
+            />{" "}
           </circle>
         </svg>
       </div>
 
-      {/* Partikel mengalir */}
-      <div className="fixed inset-0 pointer-events-none z-1">
+      <div className="fixed inset-0 pointer-events-none z-[-1] opacity-70">
+        {" "}
+        {/* z-index negatif, opacity disesuaikan */}
         <div className="particle-flow-1"></div>
         <div className="particle-flow-2"></div>
         <div className="particle-flow-3"></div>
       </div>
 
-      <style jsx>{`
+      {/* Pastikan style jsx tidak bentrok dan keyframes terdefinisi dengan baik */}
+      <style jsx global>{`
+        /* Keyframes untuk partikel (tetap sama) */
         @keyframes flowParticle1 {
           0% {
-            transform: translate(5vw, 8vh);
+            transform: translate(5vw, 8vh) scale(0.5);
             opacity: 0;
           }
           10% {
             opacity: 1;
+            transform: scale(1);
           }
           90% {
             opacity: 1;
+            transform: scale(1);
           }
           100% {
-            transform: translate(92vw, 95vh);
+            transform: translate(92vw, 95vh) scale(0.5);
             opacity: 0;
           }
         }
-
         @keyframes flowParticle2 {
           0% {
-            transform: translate(2vw, 5vh);
+            transform: translate(2vw, 5vh) scale(0.5);
             opacity: 0;
           }
           15% {
             opacity: 0.8;
+            transform: scale(0.9);
           }
           85% {
             opacity: 0.8;
+            transform: scale(0.9);
           }
           100% {
-            transform: translate(95vw, 92vh);
+            transform: translate(95vw, 92vh) scale(0.5);
             opacity: 0;
           }
         }
-
         @keyframes flowParticle3 {
           0% {
-            transform: translate(8vw, 10vh);
+            transform: translate(8vw, 10vh) scale(0.5);
             opacity: 0;
           }
           20% {
             opacity: 0.6;
+            transform: scale(0.7);
           }
           80% {
             opacity: 0.6;
+            transform: scale(0.7);
           }
           100% {
-            transform: translate(97vw, 98vh);
+            transform: translate(97vw, 98vh) scale(0.5);
             opacity: 0;
           }
         }
@@ -325,57 +287,65 @@ export default function Home() {
           position: absolute;
           width: 8px;
           height: 8px;
-          background: radial-gradient(circle, #10b981, transparent);
+          background: radial-gradient(circle, #10b981, transparent 60%);
           border-radius: 50%;
-          animation: flowParticle1 15s linear infinite;
+          animation: flowParticle1 15s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
+          filter: blur(1px);
         }
-
         .particle-flow-2 {
           position: absolute;
           width: 6px;
           height: 6px;
-          background: radial-gradient(circle, #34d399, transparent);
+          background: radial-gradient(circle, #34d399, transparent 60%);
           border-radius: 50%;
-          animation: flowParticle2 18s linear infinite 3s;
+          animation: flowParticle2 18s cubic-bezier(0.25, 0.1, 0.25, 1) infinite
+            3s;
+          filter: blur(1px);
         }
-
         .particle-flow-3 {
           position: absolute;
           width: 4px;
           height: 4px;
-          background: radial-gradient(circle, #6ee7b7, transparent);
+          background: radial-gradient(circle, #6ee7b7, transparent 60%);
           border-radius: 50%;
-          animation: flowParticle3 20s linear infinite 6s;
+          animation: flowParticle3 20s cubic-bezier(0.25, 0.1, 0.25, 1) infinite
+            6s;
+          filter: blur(1px);
+        }
+
+        /* Sedikit penyesuaian untuk body jika diperlukan untuk performa scroll atau overflow */
+        body {
+          // overflow-x: hidden; // Sudah ada di <main>
         }
       `}</style>
 
-      {/* Header */}
-      <div className="border-b border-gray-200 relative z-10">
-        <HeaderSection />
-      </div>
+      {/* --- Konten Utama Halaman --- */}
+      {/* Dibungkus dengan div yang memiliki z-index lebih tinggi dari background */}
+      <div className="relative z-[1]">
+        <div className="border-b border-gray-200/70 backdrop-blur-sm sticky top-0 z-50 bg-white/80">
+          {" "}
+          {/* Header dibuat sticky */}
+          <HeaderSection />
+        </div>
 
-      {/* Tentang */}
-      <div className="border-b border-gray-200 relative z-10">
-        <TentangSection />
-      </div>
-
-      {/* Peta */}
-      <div className="border-b border-gray-200 relative z-10">
-        <PetaSection />
-      </div>
-
-      {/* Statistik */}
-      <div className="border-b border-gray-200 relative z-10">
-        <StatistikSection />
-      </div>
-
-      {/* Aksi */}
-      <div className="border-b border-gray-200 relative z-10">
-        <AksiSection />
-      </div>
-      {/* Footer */}
-      <div className="border-b border-gray-200 relative z-10">
-        <Footer/>
+        {/* Section lainnya */}
+        <div className="border-b border-gray-200/50">
+          <TentangSection />
+        </div>
+        <div className="border-b border-gray-200/50">
+          <PetaSection />
+        </div>
+        <div className="border-b border-gray-200/50">
+          <StatistikSection />
+        </div>
+        <div className="border-b border-gray-200/50">
+          <AksiSection />
+        </div>
+        <div>
+          {" "}
+          {/* Footer tidak perlu border bawah jika itu elemen terakhir sebelum akhir body */}
+          <Footer />
+        </div>
       </div>
     </main>
   );
