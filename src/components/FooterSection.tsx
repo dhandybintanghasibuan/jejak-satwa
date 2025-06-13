@@ -230,7 +230,7 @@ export default function Footer() {
           <p className="text-xs text-gray-600 mt-1">
             Dibuat dengan semangat konservasi oleh{" "}
             <Link href="#" className="hover:text-green-400 underline">
-              Tim Wawasan Hijau
+              Satwa Rangers
             </Link>
             .
           </p>
