@@ -303,10 +303,6 @@ export default function Home() {
           <StatistikSection />
         </section>
 
-        <section className="bg-gray-50">
-          <AksiSection />
-        </section>
-
         <Footer />
       </div>
     </main>
