@@ -69,7 +69,6 @@ export default function Navbar() {
     { href: "/#tentang", label: "Tentang" },
     { href: "/#peta-interaktif", label: "Peta Interaktif" },
     { href: "/#statistik", label: "Statistik" },
-    { href: "/#aksi", label: "Aksi" },
   ];
 
   const mobileMenuVariants = {

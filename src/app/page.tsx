@@ -6,7 +6,6 @@ import dynamic from "next/dynamic";
 // Impor komponen statis
 import TentangSection from "@/components/TentangSection";
 import HeaderSection from "@/components/HeaderSection";
-import AksiSection from "@/components/AksiSection";
 import Footer from "@/components/FooterSection";
 
 // Dynamic Imports untuk Komponen Berat (sudah sangat baik!)
