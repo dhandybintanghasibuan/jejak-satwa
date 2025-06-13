@@ -1,4 +1,4 @@
-declare module "@mapbox/leaflet-omnivore" {
+declare module "leaflet-omnivore" {
   const omnivore: any;
   export default omnivore;
 }

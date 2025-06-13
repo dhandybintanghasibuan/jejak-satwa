@@ -196,7 +196,7 @@ function TitikSatwaLayer({
     let isMounted = true;
     const loadAndParseKML = async () => {
       try {
-        const omnivore: any = await import("@mapbox/leaflet-omnivore");
+        const omnivore: any = await import("leaflet-omnivore");
         if (!omnivore || typeof omnivore.kml !== "function") {
           console.error("Gagal mengimpor leaflet-omnivore.");
           return;

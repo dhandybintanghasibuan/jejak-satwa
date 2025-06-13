@@ -1,4 +1,6 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   --background: #ffffff; /* Latar utama terang */
@@ -194,8 +196,8 @@ body {
   padding: 0;
 }
 .jejaksatwa-geojson-custom-popup .leaflet-popup-content {
-   margin: 0 !important;
-   padding: 12px 16px; /* Padding lebih besar */
+    margin: 0 !important;
+    padding: 12px 16px; /* Padding lebih besar */
 }
 .jejaksatwa-geojson-popup-title {
   font-size: 1em; /* Lebih besar */
